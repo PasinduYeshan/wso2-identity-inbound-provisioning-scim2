@@ -45,5 +45,12 @@ public class SCIMProviderConstants {
     public static final String DEFAULT_USERNAME = "admin";
     public static final String ADD = "add";
     public static final String REMOVE = "remove";
+    public static final String PREFER_HEADER = "Prefer";
+    public static final String RESPOND_ASYNC = "respond-async";
+    public static final int threadPoolSize = 5;
+    public static final String CORRELATION_ID_MDC = "Correlation-ID";
+    public static final String TENANT_DOMAIN = "tenantDomain";
+    public static final String TENANT_ID = "tenantId";
+    public static final String APP_NAME = "appName";
 
 }
