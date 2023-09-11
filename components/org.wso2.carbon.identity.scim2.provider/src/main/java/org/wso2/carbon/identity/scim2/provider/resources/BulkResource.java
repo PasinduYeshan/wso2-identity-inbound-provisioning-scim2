@@ -150,8 +150,11 @@ public class BulkResource extends AbstractResource {
             // Call for process bulk data.
             SCIMResponse scimResponse = bulkResourceManager.processBulkData(resourceString, userManager, roleManager);
             // Log the response.
-            logger.info("Bulk request processed asynchronously. Response status: " + scimResponse.getResponseStatus() +
-                    " Response message: " + scimResponse.getResponseMessage());
+            if (logger.isDebugEnabled()) {
+                logger.info("Bulk request processed asynchronously. Response status: " + scimResponse.getResponseStatus() +
+                        " Response message: " + scimResponse.getResponseMessage());
+            }
+
     }
 
 
