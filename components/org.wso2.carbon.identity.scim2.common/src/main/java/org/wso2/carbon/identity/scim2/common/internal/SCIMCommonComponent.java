@@ -32,9 +32,11 @@ import org.wso2.carbon.identity.claim.metadata.mgt.ClaimMetadataManagementServic
 import org.wso2.carbon.identity.core.util.IdentityCoreInitializedEvent;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.event.handler.AbstractEventHandler;
+import org.wso2.carbon.identity.event.services.IdentityEventService;
 import org.wso2.carbon.identity.role.mgt.core.RoleManagementService;
 import org.wso2.carbon.identity.scim2.common.extenstion.SCIMUserStoreErrorResolver;
 import org.wso2.carbon.identity.scim2.common.handlers.SCIMClaimOperationEventHandler;
+import org.wso2.carbon.identity.scim2.common.handlers.SCIMBulkUserOperationEventHandler;
 import org.wso2.carbon.identity.scim2.common.impl.DefaultSCIMUserStoreErrorResolver;
 import org.wso2.carbon.identity.scim2.common.listener.SCIMGroupResolver;
 import org.wso2.carbon.identity.scim2.common.listener.SCIMTenantMgtListener;
@@ -110,6 +112,13 @@ public class SCIMCommonComponent {
                     new SCIMClaimOperationEventHandler(), null);
             if (logger.isDebugEnabled()) {
                 logger.debug("SCIMClaimOperationEventHandler is successfully registered.");
+            }
+
+            // Register bulk user operation event handler implementation.
+            ctx.getBundleContext().registerService(AbstractEventHandler.class.getName(),
+                    new SCIMBulkUserOperationEventHandler(), null);
+            if (logger.isDebugEnabled()) {
+                logger.debug("SCIMBulkUserOperationEventHandler is successfully registered.");
             }
 
             // Register default implementation of SCIMUserStoreErrorResolver
@@ -264,6 +273,22 @@ public class SCIMCommonComponent {
             logger.debug("RoleManagementService unset in SCIMCommonComponent bundle.");
         }
         SCIMCommonComponentHolder.setRoleManagementService(null);
+    }
+
+    protected void unsetIdentityEventService(IdentityEventService identityEventService) {
+
+        SCIMCommonComponentHolder.getInstance().setIdentityEventService(null);
+    }
+
+    @Reference(
+            name = "IdentityEventService",
+            service = org.wso2.carbon.identity.event.services.IdentityEventService.class,
+            cardinality = ReferenceCardinality.MANDATORY,
+            policy = ReferencePolicy.DYNAMIC,
+            unbind = "unsetIdentityEventService")
+    protected void setIdentityEventService(IdentityEventService identityEventService) {
+
+        SCIMCommonComponentHolder.getInstance().setIdentityEventService(identityEventService);
     }
 
     /**

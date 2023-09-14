@@ -141,6 +141,8 @@ public class SCIMCommonConstants {
     public static final String MIN_LENGTH = "minLength";
     public static final String MAX_LENGTH = "maxLength";
     public static final String REQUIRED = "required";
+    public static final String BULK_USER_ADD_TEMPLATE = "identity.scim2.notification.bulk.user.add";
+    public static final String SCIM_BULK_USER_OPERATION_EVENT_HANDLER_ENABLED = "SCIMBulkUserOperationEventHandler.enable";
 
 
     private static final Map<String, String> groupAttributeSchemaMap = new HashMap<>();

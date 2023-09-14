@@ -24,8 +24,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.CarbonConstants;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
-import org.wso2.carbon.identity.application.common.model.ThreadLocalProvisioningServiceProvider;
-import org.wso2.carbon.identity.application.common.util.IdentityApplicationManagementUtil;
+import org.wso2.carbon.identity.application.common.model.User;
 import org.wso2.carbon.identity.claim.metadata.mgt.ClaimMetadataHandler;
 import org.wso2.carbon.identity.claim.metadata.mgt.ClaimMetadataManagementService;
 import org.wso2.carbon.identity.claim.metadata.mgt.exception.ClaimMetadataException;
@@ -35,11 +34,18 @@ import org.wso2.carbon.identity.core.ServiceURLBuilder;
 import org.wso2.carbon.identity.core.URLBuilderException;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
+import org.wso2.carbon.identity.event.IdentityEventConstants;
+import org.wso2.carbon.identity.event.IdentityEventException;
+import org.wso2.carbon.identity.event.event.Event;
+import org.wso2.carbon.identity.recovery.IdentityRecoveryConstants;
+import org.wso2.carbon.identity.recovery.internal.IdentityRecoveryServiceDataHolder;
 import org.wso2.carbon.identity.scim2.common.cache.SCIMCustomAttributeSchemaCache;
 import org.wso2.carbon.identity.scim2.common.exceptions.IdentitySCIMException;
 import org.wso2.carbon.identity.scim2.common.internal.SCIMCommonComponentHolder;
 import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.user.core.UserStoreException;
+import org.wso2.carbon.user.core.UserStoreManager;
+import org.wso2.carbon.user.core.service.RealmService;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 import org.wso2.charon3.core.attributes.SCIMCustomAttribute;
@@ -783,6 +789,116 @@ public class SCIMCommonUtils {
             return attributeSchema;
         } catch (InternalErrorException | IdentitySCIMException e) {
             throw new CharonException("Error while building scim custom schema", e);
+        }
+    }
+
+    /**
+     * This method is to get user from the event properties.
+     *
+     * @param eventProperties Event properties.
+     * @param userStoreManager User store manager.
+     * @return user.
+     */
+    public static User getUser(Map eventProperties, UserStoreManager userStoreManager) {
+
+        String userName = (String) eventProperties.get(IdentityEventConstants.EventProperty.USER_NAME);
+        String tenantDomain = (String) eventProperties.get(IdentityEventConstants.EventProperty.TENANT_DOMAIN);
+        String domainName = userStoreManager.getRealmConfiguration().getUserStoreProperty(
+                UserCoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME);
+
+        User user = new User();
+        user.setUserName(userName);
+        user.setTenantDomain(tenantDomain);
+        user.setUserStoreDomain(domainName);
+        return user;
+    }
+
+    /**
+     * Get user email claim value.
+     *
+     * @param user             User.
+     * @param userStoreManager UserStoreManager.
+     * @return String user email address.
+     * @throws CharonException Error retrieving email address.
+     */
+    public static String getEmailClaimValue(User user, UserStoreManager userStoreManager) throws  CharonException {
+
+        String email = StringUtils.EMPTY;
+        if (user != null && userStoreManager != null) {
+            String username = user.getUserName();
+            if (StringUtils.isNotBlank(user.getUserStoreDomain())) {
+                username = IdentityUtil.addDomainToName(username, user.getUserStoreDomain());
+            }
+            try {
+                email = userStoreManager.getUserClaimValue(username, IdentityRecoveryConstants.EMAIL_ADDRESS_CLAIM,
+                        null);
+            } catch (UserStoreException e) {
+                String error = String.format("Error occurred while retrieving existing email address for user: " +
+                        "%s in tenant domain : %s", username, user.getTenantDomain());
+                throw new CharonException(error, e);
+            }
+        }
+        return email;
+    }
+
+    /**
+     * This method is used to get user store manager for the user.
+     *
+     * @param user user
+     * @return UserStoreManager
+     * @throws CharonException Error retrieving user store manager.
+     */
+    public static org.wso2.carbon.user.api.UserStoreManager getUserStoreManager(User user) throws CharonException {
+
+        RealmService realmService = IdentityRecoveryServiceDataHolder.getInstance().getRealmService();
+        try {
+            org.wso2.carbon.user.api.UserRealm tenantUserRealm = realmService.getTenantUserRealm(IdentityTenantUtil.
+                    getTenantId(user.getTenantDomain()));
+            if (IdentityUtil.getPrimaryDomainName().equals(user.getUserStoreDomain())) {
+                return tenantUserRealm.getUserStoreManager();
+            }
+            return ((org.wso2.carbon.user.core.UserStoreManager) tenantUserRealm.getUserStoreManager())
+                    .getSecondaryUserStoreManager(user.getUserStoreDomain());
+        } catch (org.wso2.carbon.user.api.UserStoreException e) {
+            if (log.isDebugEnabled()) {
+                String message = String
+                        .format("Error getting the user store manager for the user : %s with in domain : %s.",
+                                user.getUserStoreDomain() + CarbonConstants.DOMAIN_SEPARATOR + user.getUserName(),
+                                user.getTenantDomain());
+                log.debug(message);
+            }
+            throw new CharonException("Error getting the user store manager for the user.", e);
+        }
+    }
+
+    /**
+     * This method is used to publish identity event.
+     *
+     * @param props properties
+     * @param eventName event name
+     * @throws IdentityEventException IdentityEventException
+     */
+    public static void publishEvent(Map<String, Object> props,
+                              String eventName) throws IdentityEventException {
+
+        HashMap<String, Object> properties = new HashMap<>();
+        if (props != null) {
+            for (Map.Entry<String, Object> entry : props.entrySet()) {
+                String key = entry.getKey();
+                Object value = entry.getValue();
+                if (StringUtils.isNotBlank(key) && value != null) {
+                    properties.put(key, value);
+                }
+            }
+        }
+
+        Event identityMgtEvent = new Event(eventName, properties);
+
+        try {
+            SCIMCommonComponentHolder.getInstance().getIdentityEventService().handleEvent(identityMgtEvent);
+        } catch (IdentityEventException e) {
+            String message = String.format("Error while publishing event : %s", eventName);
+            throw new IdentityEventException(message, e);
         }
     }
 }

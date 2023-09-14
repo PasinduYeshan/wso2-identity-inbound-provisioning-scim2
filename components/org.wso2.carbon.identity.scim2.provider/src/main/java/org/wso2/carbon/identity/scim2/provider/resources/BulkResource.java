@@ -22,15 +22,15 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.slf4j.MDC;
-import org.wso2.carbon.base.MultitenantConstants;
-import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
-import org.wso2.carbon.identity.base.IdentityException;
-import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
+import org.wso2.carbon.identity.application.common.model.User;
+import org.wso2.carbon.identity.event.IdentityEventConstants;
 import org.wso2.carbon.identity.event.IdentityEventException;
 import org.wso2.carbon.identity.scim2.common.impl.IdentitySCIMManager;
+import org.wso2.carbon.identity.scim2.common.utils.SCIMCommonUtils;
 import org.wso2.carbon.identity.scim2.provider.util.SCIMProviderConstants;
 import org.wso2.carbon.identity.scim2.provider.util.SupportUtils;
+import org.wso2.carbon.user.core.UserStoreManager;
 import org.wso2.charon3.core.exceptions.CharonException;
 import org.wso2.charon3.core.exceptions.FormatNotSupportedException;
 import org.wso2.charon3.core.extensions.RoleManager;
@@ -47,7 +47,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -80,16 +79,31 @@ public class BulkResource extends AbstractResource {
             bulkResourceManager = new BulkResourceManager();
 
             // Extract context
-            int tenantId = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantId();
-            String tenantDomain = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantDomain();
+            int tenantId = SupportUtils.getTenantId();
+            String tenantDomain = SupportUtils.getTenantDomain();
             String appName = PrivilegedCarbonContext.getThreadLocalCarbonContext().getApplicationName();
             String traceID = MDC.get(SCIMProviderConstants.CORRELATION_ID_MDC);
+
+            User user = SupportUtils.getUser();
 
             // Handle async request
             if (RESPOND_ASYNC.equals(respondType)) {
                 // Execute the main logic asynchronously and return 202 immediately
-                CompletableFuture.runAsync(() -> processBulkDataAsync(tenantId,
-                        tenantDomain, appName, traceID, resourceString), threadPool);
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        processBulkDataAsync(tenantId,
+                                tenantDomain, appName, traceID, resourceString, user);
+                    } catch (IdentityEventException e) {
+                        logger.error("Error while publishing event for bulk user add.", e);
+                        throw new RuntimeException(e);
+                    } catch (CharonException e) {
+                        logger.error("Error while processing bulk user add.", e);
+                        throw new RuntimeException(e);
+                    } catch (Exception e) {
+                        logger.error("Error while processing bulk user add.", e);
+                        throw new RuntimeException(e);
+                    }
+                }, threadPool);
 
                 return SupportUtils.buildResponse(acceptedSCIMResponse());
             } else {
@@ -139,24 +153,33 @@ public class BulkResource extends AbstractResource {
      * @param appName           application name
      * @param traceId           correlation id
      * @param resourceString    resource string
+     * @param user              user
+     * @throws IdentityEventException  if an error occurred while publishing the event.
      */
     private void processBulkDataAsync(int tenantId, String tenantDomain, String appName,
-                                     String traceId, String resourceString) {
-            // Set the MDC values.
-            setMDCValues(tenantId, tenantDomain, appName, traceId);
-            // Set the tenant information in the thread local carbon context.
-            setPrivilegedCarbonContextValues(tenantId, tenantDomain);
+                                     String traceId, String resourceString, User user)
+            throws IdentityEventException, CharonException {
+            try {
+                // Set the MDC values.
+                setMDCValues(tenantId, tenantDomain, appName, traceId);
+                // Set the tenant information in the thread local carbon context.
+                setPrivilegedCarbonContextValues(tenantId, tenantDomain);
 
-            // Call for process bulk data.
-            SCIMResponse scimResponse = bulkResourceManager.processBulkData(resourceString, userManager, roleManager);
-            // Log the response.
-            if (logger.isDebugEnabled()) {
-                logger.info("Bulk request processed asynchronously. Response status: " + scimResponse.getResponseStatus() +
-                        " Response message: " + scimResponse.getResponseMessage());
+                // Call for process bulk data.
+                SCIMResponse scimResponse = bulkResourceManager.processBulkData(resourceString, userManager, roleManager);
+
+                // Send email notification upon completion of the bulk import.
+                sendNotification(user, scimResponse);
+
+                // Log the response.
+                if (logger.isDebugEnabled()) {
+                    logger.info("Bulk request processed asynchronously. Response status: " +
+                            scimResponse.getResponseStatus() + " Response message: " + scimResponse.getResponseMessage());
+                }
+            } catch (IdentityEventException e) {
+                throw new IdentityEventException("Error while publishing event for bulk user add.", e);
             }
-
     }
-
 
     /**
      * Generate a SCIMResponse for 202 Accepted status.
@@ -205,6 +228,23 @@ public class BulkResource extends AbstractResource {
             privilegedCarbonContext.setTenantDomain(tenantDomain);
         }
     }
+
+    private void sendNotification(User user, SCIMResponse scimResponse) throws CharonException, IdentityEventException {
+
+        Map<String, Object> properties = new HashMap<>();
+        properties.put(IdentityEventConstants.EventProperty.USER_STORE_MANAGER, SCIMCommonUtils.getUserStoreManager(user));
+        properties.put(IdentityEventConstants.EventProperty.USER_NAME, user.getUserName());
+        properties.put(IdentityEventConstants.EventProperty.TENANT_DOMAIN, user.getTenantDomain());
+        properties.put(IdentityEventConstants.EventProperty.USER_STORE_DOMAIN, user.getUserStoreDomain());
+
+        // TODO: Process the response and publish the event accordingly.
+
+        // Publish event.
+        SCIMCommonUtils.publishEvent(properties, IdentityEventConstants.Event.POST_BULK_ADD_USER);
+    }
+
+
+
 
 }
 

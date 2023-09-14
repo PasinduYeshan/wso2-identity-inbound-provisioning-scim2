@@ -19,6 +19,7 @@
 package org.wso2.carbon.identity.scim2.common.internal;
 
 import org.wso2.carbon.identity.claim.metadata.mgt.ClaimMetadataManagementService;
+import org.wso2.carbon.identity.event.services.IdentityEventService;
 import org.wso2.carbon.identity.scim2.common.extenstion.SCIMUserStoreErrorResolver;
 import org.wso2.carbon.user.core.service.RealmService;
 import org.wso2.carbon.user.mgt.RolePermissionManagementService;
@@ -34,11 +35,18 @@ import java.util.List;
  */
 public class SCIMCommonComponentHolder {
 
+   private static SCIMCommonComponentHolder instance = new SCIMCommonComponentHolder();
     private static RealmService realmService;
     private static ClaimMetadataManagementService claimManagementService;
     private static RolePermissionManagementService rolePermissionManagementService;
     private static RoleManagementService roleManagementService;
     private static final List<SCIMUserStoreErrorResolver> scimUserStoreErrorResolvers = new ArrayList<>();
+    private IdentityEventService identityEventService;
+
+    public static SCIMCommonComponentHolder getInstance() {
+
+        return instance;
+    }
 
     /**
      * Get realm service.
@@ -135,5 +143,15 @@ public class SCIMCommonComponentHolder {
 
         scimUserStoreErrorResolvers.remove(scimUserStoreErrorResolver);
         scimUserStoreErrorResolvers.sort(Comparator.comparing(SCIMUserStoreErrorResolver::getOrder).reversed());
+    }
+
+    public IdentityEventService getIdentityEventService() {
+
+        return identityEventService;
+    }
+
+    public void setIdentityEventService(IdentityEventService identityEventService) {
+
+        this.identityEventService = identityEventService;
     }
 }

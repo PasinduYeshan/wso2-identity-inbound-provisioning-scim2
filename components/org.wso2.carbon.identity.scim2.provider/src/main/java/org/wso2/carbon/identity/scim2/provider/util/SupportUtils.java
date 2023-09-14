@@ -26,6 +26,7 @@ import org.apache.commons.logging.LogFactory;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
+import org.wso2.carbon.identity.application.common.model.User;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.recovery.IdentityRecoveryConstants;
@@ -34,6 +35,8 @@ import org.wso2.carbon.identity.scim2.common.exceptions.IdentitySCIMException;
 import org.wso2.carbon.identity.scim2.common.utils.SCIMCommonConstants;
 import org.wso2.carbon.identity.scim2.common.utils.SCIMCommonUtils;
 import org.wso2.carbon.identity.scim2.common.utils.SCIMCustomSchemaProcessor;
+import org.wso2.carbon.user.api.UserStoreException;
+import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 import org.wso2.charon3.core.attributes.SCIMCustomAttribute;
 import org.wso2.charon3.core.config.SCIMCustomSchemaExtensionBuilder;
@@ -232,5 +235,20 @@ public class SupportUtils {
             scimResponse.getHeaderParamMap().put(ASK_PASSWORD_CONFIRMATION_CODE_HEADER_NAME, confirmationCode);
         }
         return buildResponse(scimResponse);
+    }
+
+    public static User getUser() throws CharonException {
+        try {
+            User user = new User();
+            user.setUserName(SupportUtils.getAuthenticatedUsername());
+            user.setTenantDomain(SupportUtils.getTenantDomain());
+            user.setUserStoreDomain(PrivilegedCarbonContext.getThreadLocalCarbonContext().getUserRealm()
+                    .getRealmConfiguration().getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME));
+            return user;
+        } catch (UserStoreException e) {
+            String error = "Error obtaining user realm for tenant: " + SupportUtils.getTenantDomain();
+            throw new CharonException(error, e);
+        }
+
     }
 }
