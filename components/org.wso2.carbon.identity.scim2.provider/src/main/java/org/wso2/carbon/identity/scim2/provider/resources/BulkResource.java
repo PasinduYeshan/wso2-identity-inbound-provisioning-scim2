@@ -21,16 +21,17 @@ package org.wso2.carbon.identity.scim2.provider.resources;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.slf4j.MDC;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.application.common.model.User;
 import org.wso2.carbon.identity.event.IdentityEventConstants;
 import org.wso2.carbon.identity.event.IdentityEventException;
 import org.wso2.carbon.identity.scim2.common.impl.IdentitySCIMManager;
+import org.wso2.carbon.identity.scim2.common.utils.SCIMCommonConstants;
 import org.wso2.carbon.identity.scim2.common.utils.SCIMCommonUtils;
 import org.wso2.carbon.identity.scim2.provider.util.SCIMProviderConstants;
 import org.wso2.carbon.identity.scim2.provider.util.SupportUtils;
-import org.wso2.carbon.user.core.UserStoreManager;
 import org.wso2.charon3.core.exceptions.CharonException;
 import org.wso2.charon3.core.exceptions.FormatNotSupportedException;
 import org.wso2.charon3.core.extensions.RoleManager;
@@ -41,7 +42,9 @@ import org.wso2.charon3.core.protocol.ResponseCodeConstants;
 import org.wso2.charon3.core.schema.SCIMConstants;
 
 
-import javax.ws.rs.*;
+import javax.ws.rs.HeaderParam;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
 import javax.ws.rs.core.Response;
 import java.util.HashMap;
 import java.util.Map;
@@ -49,6 +52,22 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.File;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Path("/")
 public class BulkResource extends AbstractResource {
@@ -159,25 +178,22 @@ public class BulkResource extends AbstractResource {
     private void processBulkDataAsync(int tenantId, String tenantDomain, String appName,
                                      String traceId, String resourceString, User user)
             throws IdentityEventException, CharonException {
-            try {
-                // Set the MDC values.
-                setMDCValues(tenantId, tenantDomain, appName, traceId);
-                // Set the tenant information in the thread local carbon context.
-                setPrivilegedCarbonContextValues(tenantId, tenantDomain);
 
-                // Call for process bulk data.
-                SCIMResponse scimResponse = bulkResourceManager.processBulkData(resourceString, userManager, roleManager);
+            // Set the MDC values.
+            setMDCValues(tenantId, tenantDomain, appName, traceId);
+            // Set the tenant information in the thread local carbon context.
+            setPrivilegedCarbonContextValues(tenantId, tenantDomain);
 
-                // Send email notification upon completion of the bulk import.
-                sendNotification(user, scimResponse);
+            // Call for process bulk data.
+            SCIMResponse scimResponse = bulkResourceManager.processBulkData(resourceString, userManager, roleManager);
 
-                // Log the response.
-                if (logger.isDebugEnabled()) {
-                    logger.info("Bulk request processed asynchronously. Response status: " +
-                            scimResponse.getResponseStatus() + " Response message: " + scimResponse.getResponseMessage());
-                }
-            } catch (IdentityEventException e) {
-                throw new IdentityEventException("Error while publishing event for bulk user add.", e);
+            // TODO: Send email notification upon completion of the bulk import.
+            // sendNotification(user, scimResponse);
+
+            // Log the response.
+            if (logger.isDebugEnabled()) {
+                logger.info("Bulk request processed asynchronously. Response status: " +
+                        scimResponse.getResponseStatus() + " Response message: " + scimResponse.getResponseMessage());
             }
     }
 
@@ -229,6 +245,14 @@ public class BulkResource extends AbstractResource {
         }
     }
 
+    /**
+     * Send email notification upon completion of the bulk import.
+     *
+     * @param user user
+     * @param scimResponse SCIMResponse
+     * @throws CharonException If an error occurred while getting the user store manager.
+     * @throws IdentityEventException If an error occurred while publishing the event.
+     */
     private void sendNotification(User user, SCIMResponse scimResponse) throws CharonException, IdentityEventException {
 
         Map<String, Object> properties = new HashMap<>();
@@ -237,14 +261,9 @@ public class BulkResource extends AbstractResource {
         properties.put(IdentityEventConstants.EventProperty.TENANT_DOMAIN, user.getTenantDomain());
         properties.put(IdentityEventConstants.EventProperty.USER_STORE_DOMAIN, user.getUserStoreDomain());
 
-        // TODO: Process the response and publish the event accordingly.
-
         // Publish event.
         SCIMCommonUtils.publishEvent(properties, IdentityEventConstants.Event.POST_BULK_ADD_USER);
     }
-
-
-
 
 }
 

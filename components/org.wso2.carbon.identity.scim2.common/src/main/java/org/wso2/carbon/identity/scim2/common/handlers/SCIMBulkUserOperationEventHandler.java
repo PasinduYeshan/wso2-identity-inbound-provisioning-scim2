@@ -34,7 +34,6 @@ import org.wso2.carbon.identity.scim2.common.internal.SCIMCommonComponentHolder;
 import org.wso2.carbon.identity.scim2.common.utils.SCIMCommonConstants;
 import org.wso2.carbon.identity.scim2.common.utils.SCIMCommonUtils;
 import org.wso2.carbon.user.core.UserStoreManager;
-import org.wso2.carbon.identity.recovery.IdentityRecoveryConstants;
 import org.wso2.charon3.core.exceptions.CharonException;
 
 import java.util.HashMap;
@@ -110,7 +109,7 @@ public class SCIMBulkUserOperationEventHandler extends AbstractEventHandler {
                     properties.putAll(event.getEventProperties());
                 }
 
-                triggerNotification(userEmail, IdentityRecoveryConstants.NOTIFICATION_TYPE_SELF_SIGNUP_NOTIFY, properties);
+                triggerNotification(userEmail, SCIMCommonConstants.NOTIFICATION_TYPE_BULK_USER_ADD, properties);
             } catch (CharonException e) {
                 throw new IdentityEventException("Error while retrieving email claim for user: " + user.getUserName(), e);
             }
@@ -119,8 +118,8 @@ public class SCIMBulkUserOperationEventHandler extends AbstractEventHandler {
     private void triggerNotification(String userEmail, String templateType, Map<String, Object> properties)
             throws IdentityEventException {
 
-        properties.put(IdentityRecoveryConstants.SEND_TO, userEmail);
-        properties.put(IdentityRecoveryConstants.TEMPLATE_TYPE, templateType);
+        properties.put(SCIMCommonConstants.EVENT_PROP_SEND_TO, userEmail);
+        properties.put(SCIMCommonConstants.EVENT_PROP_TEMPLATE_TYPE, templateType);
 
         Event identityMgtEvent = new Event(IdentityEventConstants.Event.TRIGGER_NOTIFICATION, properties);
 
